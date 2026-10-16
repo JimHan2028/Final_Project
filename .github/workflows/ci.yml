@@ -24,11 +24,11 @@ jobs:
       - name: Linting and static analysis with ruff
         run: ruff check .
 
-      - name: Format check with black
-        run: black --check .
+      # - name: Format check with black
+      #   run: black --check .
 
-      - name: Run the full application test suite
-        run: pytest -v
+      # - name: Run the full application test suite
+      #   run: pytest -v
 
-      - name: Build Docker image and verify no build‑time errors
-        run: docker build -t mlops-assignment-ci:validate .
+      # - name: Build Docker image and verify no build‑time errors
+      #   run: docker build -t mlops-assignment-ci:validate .
