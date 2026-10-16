@@ -1,0 +1,33 @@
+name: CD Build Pipeline
+on:
+  push:
+    branches: [ staging, main ]
+
+jobs:
+  build_target_image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Create staging .env from staging GitHub secret
+        if: github.ref == 'refs/heads/staging'
+        run: |
+          cat > .env << 'EOF'
+${{ secrets.STAGING_ENV_CONTENT }}
+EOF
+
+      - name: Create production .env from production GitHub secret
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cat > .env << 'EOF'
+${{ secrets.PROD_ENV_CONTENT }}
+EOF
+
+      - name: Build staging Docker image
+        if: github.ref == 'refs/heads/staging'
+        run: docker build -t mlops-app:staging .
+
+      - name: Build production Docker image
+        if: github.ref == 'refs/heads/main'
+        run: docker build -t mlops-app:prod .
