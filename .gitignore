@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.ipynb_checkpoints
+
+# DVC & MLflow
+mlruns/
+data/
+*.dvc.tmp
+
+# Docker
+.dockerignore
+
+# WSL系统文件（关键！避免把.bashrc .cache提交进去）
+.bash_history
+.bashrc
+.cache/
