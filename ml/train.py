@@ -1,16 +1,17 @@
 """训练脚本 —— 银行定期存款营销预测（UCI Bank Marketing）。
 
 用法（在项目根目录执行）：
-    python ml/train.py
-    python ml/train.py --data data/bank-additional-full.csv
+    python ml/train.py                                  # v1 数据
+    python ml/train.py --data data/bank-additional-v2.csv --dataset-version v2
+    python ml/train.py --no-save                        # 只出实验结果，不覆盖 model.pkl
 
 每次运行会：
-  1. 读取数据集（DVC 跟踪的 data/，当前版本 v1）；
+  1. 读取数据集（DVC 跟踪的 data/，默认 v1）；
   2. 分层划分训练 / 测试集；
-  3. 逐个训练候选模型，向 MLflow（本地文件后端 mlruns/）记录
+  3. 逐个训练候选模型，向 MLflow（本地 sqlite + mlruns/）记录
      git commit、数据集版本、超参数、指标与混淆矩阵产物；
-  4. 以 ROC-AUC 择优，把最优 Pipeline 保存到 ml/registry/model.pkl，
-     并把 pkl 作为 artifact 回传到对应 run。
+  4. 以 ROC-AUC 择优，把最优 Pipeline 保存到 ml/registry/model.pkl
+     （加 --no-save 则只记录不落盘，用于比数据版本）。
 """
 
 from __future__ import annotations
@@ -51,7 +52,6 @@ REGISTRY_DIR = PROJECT_ROOT / "ml" / "registry"
 MODEL_PATH = REGISTRY_DIR / "model.pkl"
 
 EXPERIMENT_NAME = "bank-marketing"
-DATASET_VERSION = "v1"
 POSITIVE_LABEL = "yes"
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
@@ -151,6 +151,7 @@ def evaluate_candidate(
     y_test: pd.Series,
     data_md5: str,
     commit: str,
+    dataset_version: str,
 ) -> dict[str, Any]:
     """训练一个候选模型并把全部信息写入 MLflow，返回评估结果。"""
     pipeline = build_pipeline(factory())
@@ -175,7 +176,7 @@ def evaluate_candidate(
         mlflow.log_params(
             {
                 "model_name": name,
-                "dataset_version": DATASET_VERSION,
+                "dataset_version": dataset_version,
                 "train_rows": len(X_train),
                 "test_rows": len(X_test),
                 **{
@@ -187,7 +188,7 @@ def evaluate_candidate(
         mlflow.set_tags(
             {
                 "git_commit": commit,
-                "dataset_version": DATASET_VERSION,
+                "dataset_version": dataset_version,
                 "data_md5": data_md5,
             }
         )
@@ -216,7 +217,17 @@ def main() -> None:
         "--data",
         type=Path,
         default=DEFAULT_DATA_PATH,
-        help="训练数据 CSV 路径（默认 data/bank-additional-full.csv）",
+        help="训练数据 CSV 路径（默认 data/bank-additional-full.csv，即 v1）",
+    )
+    parser.add_argument(
+        "--dataset-version",
+        default="v1",
+        help="数据版本号，跟 --data 配套（v2 就写 v2），进 MLflow 的 tag/param",
+    )
+    parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="只记录实验不覆盖 ml/registry/model.pkl",
     )
     args = parser.parse_args()
 
@@ -242,7 +253,15 @@ def main() -> None:
 
     results = [
         evaluate_candidate(
-            name, factory, X_train, X_test, y_train, y_test, data_md5, commit
+            name,
+            factory,
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            data_md5,
+            commit,
+            args.dataset_version,
         )
         for name, factory in candidate_models().items()
     ]
@@ -250,21 +269,25 @@ def main() -> None:
     # 择优标准：ROC-AUC（正类占比仅 ~11%，AUC 对类别不平衡最稳健）
     best = max(results, key=lambda item: item["metrics"]["roc_auc"])
 
-    REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
-    joblib.dump(best["pipeline"], MODEL_PATH)
+    if not args.no_save:
+        REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
+        joblib.dump(best["pipeline"], MODEL_PATH)
 
-    # 回到最优 run，把最终 pkl 也作为 artifact 归档
-    with mlflow.start_run(run_id=best["run_id"]):
-        mlflow.log_artifact(str(MODEL_PATH), artifact_path="model")
-        mlflow.set_tag("prod_candidate", "true")
+        # 回到最优 run，把最终 pkl 也作为 artifact 归档
+        with mlflow.start_run(run_id=best["run_id"]):
+            mlflow.log_artifact(str(MODEL_PATH), artifact_path="model")
+            mlflow.set_tag("prod_candidate", "true")
 
     print("\n=== 训练完成 ===")
-    print(f"数据：{args.data} (md5={data_md5[:12]}..., 版本 {DATASET_VERSION})")
+    print(f"数据：{args.data} (md5={data_md5[:12]}..., 版本 {args.dataset_version})")
     print(f"git commit：{commit}")
     for item in results:
         marker = "  <- 生产候选" if item is best else ""
         print(f"  {item['name']}: {item['metrics']}{marker}")
-    print(f"最优模型已保存：{MODEL_PATH}")
+    if args.no_save:
+        print("本次 --no-save：registry 里的 model.pkl 没动")
+    else:
+        print(f"最优模型已保存：{MODEL_PATH}")
     print(f"MLflow：sqlite:///{SQLITE_DB_PATH.as_posix()}（产物在 {MLRUNS_DIR}）")
 
 
