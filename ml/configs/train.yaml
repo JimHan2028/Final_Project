@@ -1,0 +1,56 @@
+# Two MLflow runs are expected by the assignment: a baseline and an improved one.
+# Both are the same linear model; they differ in the dataset version and in how
+# the decision threshold is chosen (see ml/README_experiments.md).
+
+data:
+  path: data/bank-additional-full.csv
+  test_size: 0.3
+  validation_size: 0.2
+  seed: 42
+
+mlflow:
+  experiment: bank-marketing
+  tracking_uri: sqlite:///mlflow.db
+
+runs:
+  baseline:
+    run_name: v1-baseline-logreg
+    deployable: false
+    data_version: v1
+    model: logistic_regression
+    params:
+      C: 1.0
+      max_iter: 5000
+      solver: lbfgs
+      class_weight: null
+    threshold:
+      mode: fixed
+      value: 0.5
+
+  v2_default:
+    run_name: v2-logreg-default-threshold
+    deployable: false
+    data_version: v2
+    model: logistic_regression
+    params:
+      C: 1.0
+      max_iter: 5000
+      solver: lbfgs
+      class_weight: null
+    threshold:
+      mode: fixed
+      value: 0.5
+
+  production:
+    run_name: v2-logreg-tuned-threshold
+    deployable: true
+    data_version: v2
+    model: logistic_regression
+    params:
+      C: 1.0
+      max_iter: 5000
+      solver: lbfgs
+      class_weight: null
+    threshold:
+      mode: precision_target
+      precision_target: 0.6

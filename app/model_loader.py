@@ -3,14 +3,16 @@
 设计要点：
   * 进程内单例，启动时加载一次，请求路径上直接复用；
   * 真 pkl 未就位时回落到占位模型，保证 CI 与本地开发不被训练进度阻塞；
-  * joblib 属模型段依赖，此处延迟导入 —— 未回填时不阻塞应用启动；
+  * 推理输入是「记录字典列表」，真实模型路径下会转成带固定列序的
+    DataFrame（契约第 3 条）再交给 Pipeline，调用方无需做任何预处理；
   * 统一屏蔽模型类型差异（predict_proba / decision_function / 无分数）。
 """
+
 from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -20,20 +22,23 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = PROJECT_ROOT / "ml" / "registry" / "model.pkl"
 
+# 契约第 2 条：score 是「正类（认购）概率」，不是预测类的置信度
+POSITIVE_LABEL = "yes"
+
 _model: Any = None
 
 
 class FakeModel:
     """占位模型：只为跑通链路，不做任何真实预测。
 
-    警告：占位模型无法暴露 pkl 的版本兼容问题，Day2 必须用真实 pkl 做一次
-    集成验证（见工作手册 4.4 节）。
+    警告：占位模型无法暴露 pkl 的版本兼容问题，模型回填后必须用真实 pkl
+    做一次集成验证（启动后 /health 应显示 model_loaded=true）。
     """
 
     is_fake = True
 
-    def predict(self, texts: Sequence[str]) -> list[str]:
-        return ["not_spam"] * len(list(texts))
+    def predict(self, records: Sequence[Mapping[str, Any]]) -> list[str]:
+        return ["no"] * len(list(records))
 
 
 def load_model(path: Path = MODEL_PATH) -> Any:
@@ -83,6 +88,34 @@ def _sigmoid(value: float) -> float:
     return exp_value / (1.0 + exp_value)
 
 
+def _positive_index(model: Any) -> int | None:
+    """定位 classes_ 中正类（yes）的列下标，找不到返回 None。"""
+    classes = getattr(model, "classes_", None)
+    if classes is None:
+        return None
+    labels = [str(cls).strip().lower() for cls in classes]
+    if POSITIVE_LABEL in labels:
+        return labels.index(POSITIVE_LABEL)
+    return None
+
+
+def _proba_to_scores(model: Any, frame: Any) -> list[float]:
+    """取「yes 类概率」作为 score。
+
+    predict_proba 的列顺序跟 classes_ 对齐，不能简单取 max，
+    否则 score 会变成预测类的置信度（预测 no 时 score 接近 1，语义相反）。
+    """
+    proba = model.predict_proba(frame)
+    index = _positive_index(model)
+    if index is None:
+        logger.warning(
+            "模型未暴露以 %r 为正类的 classes_，score 退化为最大类概率（语义可能相反）",
+            POSITIVE_LABEL,
+        )
+        return [float(max(row)) for row in proba]
+    return [float(row[index]) for row in proba]
+
+
 def _decision_to_scores(raw: Any) -> list[float]:
     """decision_function 输出可能是 (n,) 或 (n, k)，统一成每样本一个分数。"""
     rows = list(raw)
@@ -93,19 +126,42 @@ def _decision_to_scores(raw: Any) -> list[float]:
     return [_sigmoid(float(value)) for value in rows]
 
 
-def predict(texts: Sequence[str]) -> tuple[list[str], list[float]]:
+def _records_to_frame(records: Sequence[Mapping[str, Any]]):
+    """把记录字典列表转成带固定列序的 DataFrame（契约第 3 条）。
+
+    延迟导入 pandas / ml.data_pipeline：真实模型路径下两者必然可用
+    （反序列化 pkl 本身就需要），占位模型路径下则完全不依赖。
+    """
+    import pandas as pd
+
+    from ml.data_pipeline import FEATURE_COLUMNS
+
+    rows = [
+        {column: record[column] for column in FEATURE_COLUMNS} for record in records
+    ]
+    return pd.DataFrame(rows, columns=list(FEATURE_COLUMNS))
+
+
+def predict(records: Sequence[Mapping[str, Any]]) -> tuple[list[str], list[float]]:
     """统一推理出口，返回 (labels, scores)。"""
-    items = list(texts)
+    items = list(records)
+    if not items:
+        return [], []
+
     model = get_model()
 
-    labels = [str(label) for label in model.predict(items)]
-
+    # 占位模型路径：不触碰 pandas，保证轻量环境也能跑通 CI
     if getattr(model, "is_fake", False):
-        scores = [0.5] * len(labels)
-    elif hasattr(model, "predict_proba"):
-        scores = [float(max(row)) for row in model.predict_proba(items)]
+        labels = [str(label) for label in model.predict(items)]
+        return labels, [0.5] * len(labels)
+
+    frame = _records_to_frame(items)
+    labels = [str(label) for label in model.predict(frame)]
+
+    if hasattr(model, "predict_proba"):
+        scores = _proba_to_scores(model, frame)
     elif hasattr(model, "decision_function"):
-        scores = _decision_to_scores(model.decision_function(items))
+        scores = _decision_to_scores(model.decision_function(frame))
     else:
         scores = [1.0] * len(labels)
 
