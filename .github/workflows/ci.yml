@@ -110,6 +110,11 @@ jobs:
           pip install "dvc[azure]"
           dvc pull ml/registry/model.pkl.dvc
 
+      # .env 被 git 忽略不会进 checkout，Dockerfile 又 COPY 它，这里写个占位
+      # （真实环境的 .env 由 CD 用 Secret 渲染，CI 只验证构建链路）
+      - name: Create placeholder .env
+        run: printf 'APP_ENV=ci\nLOG_LEVEL=info\n' > .env
+
       - name: Build image
         run: docker build -t bank-marketing-api:ci .
 
