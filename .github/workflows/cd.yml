@@ -1,31 +1,87 @@
-name: CD Build Pipeline
+name: CD
+
+# 只在 staging / main 上构建并推送镜像；feature 分支走 CI 的 docker job 验证构建，
+# 不污染镜像仓库。需要验证推送链路时用 workflow_dispatch 手动触发。
 on:
   push:
-    branches: [ staging, main ]
+    branches: [staging, main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
 
 jobs:
-  build_target_image:
+  build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    # GitHub Environments 卡点：production 可配置必须人工批准
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Create staging .env from staging GitHub secret
-        if: github.ref == 'refs/heads/staging'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # 与 CI 一致：DVC 远端就绪后镜像里才是真模型
+      - name: Pull model artifact (DVC)
+        if: vars.DVC_REMOTE_READY == 'true'
+        run: |
+          pip install "dvc[azure]"
+          dvc pull ml/registry/model.pkl.dvc
+
+      # GHCR 要求镜像名全小写，GitHub 仓库名含大小写，这里统一转换
+      - name: Compute image name
+        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=short
+            type=ref,event=branch
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Verify pushed image is runnable
         env:
-          ENV_CONTENT: ${{ secrets.STAGING_ENV_CONTENT }}
-        run: printf '%s\n' "$ENV_CONTENT" > .env
-
-      - name: Create production .env from production GitHub secret
-        if: github.ref == 'refs/heads/main'
-        env:
-          ENV_CONTENT: ${{ secrets.PROD_ENV_CONTENT }}
-        run: printf '%s\n' "$ENV_CONTENT" > .env
-
-      - name: Build staging Docker image
-        if: github.ref == 'refs/heads/staging'
-        run: docker build -t mlops-app:staging .
-
-      - name: Build production Docker image
-        if: github.ref == 'refs/heads/main'
-        run: docker build -t mlops-app:prod .
+          DVC_REMOTE_READY: ${{ vars.DVC_REMOTE_READY }}
+        run: |
+          set -euo pipefail
+          IMAGE=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          docker run -d --name api -p 8000:8000 "$IMAGE"
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health > /tmp/health.json 2>/dev/null; then ok=1; break; fi
+            sleep 2
+          done
+          cat /tmp/health.json || true
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::推送后的镜像无法启动"
+            docker logs api
+            exit 1
+          fi
+          if [ "${DVC_REMOTE_READY}" = "true" ]; then
+            grep -q '"model_loaded":true' /tmp/health.json \
+              || { echo "::error::镜像内模型未加载"; docker logs api; exit 1; }
+          fi
