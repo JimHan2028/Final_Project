@@ -6,10 +6,13 @@ __pycache__/
 .venv/
 venv/
 *.ipynb_checkpoints
+.idea/
 
 # DVC & MLflow
 mlruns/
+mlflow.db
 data/
+*.pkl
 *.dvc.tmp
 
 # Docker
