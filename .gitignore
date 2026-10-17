@@ -11,6 +11,7 @@ venv/
 mlruns/
 data/
 *.dvc.tmp
+mlflow.db
 
 # Docker
 .dockerignore
@@ -21,3 +22,5 @@ data/
 .cache/
 
 .env
+*.pkl
+.DS_Store

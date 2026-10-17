@@ -12,17 +12,15 @@ jobs:
 
       - name: Create staging .env from staging GitHub secret
         if: github.ref == 'refs/heads/staging'
-        run: |
-          cat > .env << 'EOF'
-${{ secrets.STAGING_ENV_CONTENT }}
-EOF
+        env:
+          ENV_CONTENT: ${{ secrets.STAGING_ENV_CONTENT }}
+        run: printf '%s\n' "$ENV_CONTENT" > .env
 
       - name: Create production .env from production GitHub secret
         if: github.ref == 'refs/heads/main'
-        run: |
-          cat > .env << 'EOF'
-${{ secrets.PROD_ENV_CONTENT }}
-EOF
+        env:
+          ENV_CONTENT: ${{ secrets.PROD_ENV_CONTENT }}
+        run: printf '%s\n' "$ENV_CONTENT" > .env
 
       - name: Build staging Docker image
         if: github.ref == 'refs/heads/staging'
