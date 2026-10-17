@@ -67,7 +67,9 @@ def build_features(df: pd.DataFrame, version: DatasetVersion) -> pd.DataFrame:
         return to_v1(df)
     if version == "v2":
         return to_v2(df)
-    raise ValueError(f"unknown dataset version {version!r}, expected one of {DATASET_VERSIONS}")
+    raise ValueError(
+        f"unknown dataset version {version!r}, expected one of {DATASET_VERSIONS}"
+    )
 
 
 def split_dataset(
@@ -89,7 +91,9 @@ def load_dataset(
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
     """Return X_train, X_test, y_train, y_test for the requested dataset version."""
     df = load_raw(path)
-    return split_dataset(build_features(df, version), extract_target(df), test_size, seed)
+    return split_dataset(
+        build_features(df, version), extract_target(df), test_size, seed
+    )
 
 
 def as_column_groups(features: pd.DataFrame) -> tuple[list[str], list[str]]:

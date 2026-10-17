@@ -26,6 +26,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import data_pipeline as dp
 import matplotlib.pyplot as plt
 import mlflow
 import mlflow.sklearn
@@ -50,8 +51,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-import data_pipeline as dp
-
 DEFAULT_CONFIG = Path(__file__).resolve().parent / "configs" / "train.yaml"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -74,7 +73,11 @@ def git_metadata() -> dict[str, str]:
     def git(*args: str) -> str:
         try:
             result = subprocess.run(
-                ["git", *args], capture_output=True, text=True, check=True, cwd=REPO_ROOT
+                ["git", *args],
+                capture_output=True,
+                text=True,
+                check=True,
+                cwd=REPO_ROOT,
             )
         except (OSError, subprocess.CalledProcessError):
             return ""
@@ -100,7 +103,9 @@ def dvc_dataset_hash() -> str:
     return ""
 
 
-def build_estimator(params: dict, numeric: list[str], categorical: list[str]) -> Pipeline:
+def build_estimator(
+    params: dict, numeric: list[str], categorical: list[str]
+) -> Pipeline:
     preprocessor = ColumnTransformer(
         [
             ("numeric", StandardScaler(), numeric),
@@ -129,12 +134,19 @@ def select_threshold(spec: dict, y_true: pd.Series, probabilities: np.ndarray) -
         best = admissible[np.argmax(recall[admissible])]
         return float(thresholds[min(best, len(thresholds) - 1)])
     if mode == "max_f1":
-        f1 = 2 * precision[:-1] * recall[:-1] / np.clip(precision[:-1] + recall[:-1], 1e-12, None)
+        f1 = (
+            2
+            * precision[:-1]
+            * recall[:-1]
+            / np.clip(precision[:-1] + recall[:-1], 1e-12, None)
+        )
         return float(thresholds[int(np.argmax(f1))])
     raise ValueError(f"unknown threshold mode {mode!r}")
 
 
-def recall_at_precision(y_true: pd.Series, probabilities: np.ndarray, target: float) -> float:
+def recall_at_precision(
+    y_true: pd.Series, probabilities: np.ndarray, target: float
+) -> float:
     precision, recall, _ = precision_recall_curve(y_true, probabilities)
     admissible = recall[precision >= target]
     return float(admissible.max()) if len(admissible) else 0.0
@@ -144,7 +156,9 @@ def write_plots(
     directory: Path, y_true: pd.Series, probabilities: np.ndarray, threshold: float
 ) -> tuple[Path, Path]:
     pr_path = directory / "pr_curve.png"
-    display = PrecisionRecallDisplay.from_predictions(y_true, probabilities, name="logreg")
+    display = PrecisionRecallDisplay.from_predictions(
+        y_true, probabilities, name="logreg"
+    )
     display.ax_.scatter(
         recall_score(y_true, probabilities >= threshold),
         precision_score(y_true, probabilities >= threshold),
@@ -176,7 +190,11 @@ def main() -> None:
     data_config = config["data"]
 
     data_path = Path(args.data_path or data_config["path"])
-    tracking_uri = args.tracking_uri or os.environ.get("MLFLOW_TRACKING_URI") or config["mlflow"]["tracking_uri"]
+    tracking_uri = (
+        args.tracking_uri
+        or os.environ.get("MLFLOW_TRACKING_URI")
+        or config["mlflow"]["tracking_uri"]
+    )
     experiment = args.experiment or config["mlflow"]["experiment"]
     seed = int(data_config.get("seed", 42))
     test_size = float(data_config.get("test_size", 0.3))
@@ -195,7 +213,9 @@ def main() -> None:
 
     threshold = float(threshold_spec.get("value", 0.5))
     if threshold_spec.get("mode", "fixed") == "fixed":
-        model = build_estimator(params, numeric, categorical).fit(X_train_full, y_train_full)
+        model = build_estimator(params, numeric, categorical).fit(
+            X_train_full, y_train_full
+        )
     else:
         X_fit, X_val, y_fit, y_val = train_test_split(
             X_train_full,
@@ -207,9 +227,13 @@ def main() -> None:
         threshold = select_threshold(
             threshold_spec,
             y_val,
-            build_estimator(params, numeric, categorical).fit(X_fit, y_fit).predict_proba(X_val)[:, 1],
+            build_estimator(params, numeric, categorical)
+            .fit(X_fit, y_fit)
+            .predict_proba(X_val)[:, 1],
         )
-        model = build_estimator(params, numeric, categorical).fit(X_train_full, y_train_full)
+        model = build_estimator(params, numeric, categorical).fit(
+            X_train_full, y_train_full
+        )
 
     probabilities = model.predict_proba(X_test)[:, 1]
     decisions = probabilities >= threshold
@@ -263,7 +287,9 @@ def main() -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_dir = Path(tmp)
             (tmp_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
-            (tmp_dir / "run_config.json").write_text(json.dumps(run_config, indent=2) + "\n")
+            (tmp_dir / "run_config.json").write_text(
+                json.dumps(run_config, indent=2) + "\n"
+            )
             pr_path, cm_path = write_plots(tmp_dir, y_test, probabilities, threshold)
             mlflow.log_artifact(str(tmp_dir / "metrics.json"))
             mlflow.log_artifact(str(tmp_dir / "run_config.json"))
