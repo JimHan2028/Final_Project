@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = PROJECT_ROOT / "ml" / "registry" / "model.pkl"
 
+# 契约第 2 条：score 是「正类（认购）概率」，不是预测类的置信度
+POSITIVE_LABEL = "yes"
+
 _model: Any = None
 
 
@@ -85,6 +88,34 @@ def _sigmoid(value: float) -> float:
     return exp_value / (1.0 + exp_value)
 
 
+def _positive_index(model: Any) -> int | None:
+    """定位 classes_ 中正类（yes）的列下标，找不到返回 None。"""
+    classes = getattr(model, "classes_", None)
+    if classes is None:
+        return None
+    labels = [str(cls).strip().lower() for cls in classes]
+    if POSITIVE_LABEL in labels:
+        return labels.index(POSITIVE_LABEL)
+    return None
+
+
+def _proba_to_scores(model: Any, frame: Any) -> list[float]:
+    """取「yes 类概率」作为 score。
+
+    predict_proba 的列顺序跟 classes_ 对齐，不能简单取 max，
+    否则 score 会变成预测类的置信度（预测 no 时 score 接近 1，语义相反）。
+    """
+    proba = model.predict_proba(frame)
+    index = _positive_index(model)
+    if index is None:
+        logger.warning(
+            "模型未暴露以 %r 为正类的 classes_，score 退化为最大类概率（语义可能相反）",
+            POSITIVE_LABEL,
+        )
+        return [float(max(row)) for row in proba]
+    return [float(row[index]) for row in proba]
+
+
 def _decision_to_scores(raw: Any) -> list[float]:
     """decision_function 输出可能是 (n,) 或 (n, k)，统一成每样本一个分数。"""
     rows = list(raw)
@@ -128,7 +159,7 @@ def predict(records: Sequence[Mapping[str, Any]]) -> tuple[list[str], list[float
     labels = [str(label) for label in model.predict(frame)]
 
     if hasattr(model, "predict_proba"):
-        scores = [float(max(row)) for row in model.predict_proba(frame)]
+        scores = _proba_to_scores(model, frame)
     elif hasattr(model, "decision_function"):
         scores = _decision_to_scores(model.decision_function(frame))
     else:
