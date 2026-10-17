@@ -1,0 +1,23 @@
+# 版本库与 CI 配置
+.git
+.gitignore
+.github
+.dvc
+# 虚拟环境与缓存
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+# 测试不参与镜像构建
+tests
+# 本地日志与临时产物
+*.log
+*.tmp
+# 模型侧仅保留推理所需：代码 + 契约模型产物
+ml/figures
+ml/configs
+ml/registry/model_synthetic_backup.pkl
+ml/registry/*.md
+README.md
+DEPLOYMENT.md
