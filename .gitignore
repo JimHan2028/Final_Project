@@ -9,12 +9,12 @@ venv/
 .idea/
 
 # DVC & MLflow
+# 原始数据不进 git，只提交 .dvc 指针
 mlruns/
 mlflow.db
-data/
+data/*.csv
 *.pkl
 *.dvc.tmp
-mlflow.db
 
 # Docker
 .dockerignore

@@ -16,13 +16,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # 依赖层单独缓存：只改业务代码时不触发重装
+# 走清华 PyPI 镜像 + 拉长超时：规避 files.pythonhosted.org 国内直连超时
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --timeout 120 -r requirements.txt
 
 # 应用代码（含自托管 Swagger 静态资源 app/static）
 COPY app ./app
 # 模型侧契约：ml/data_pipeline.py 提供 FEATURE_COLUMNS，ml/registry/model.pkl 为真实产物
 COPY ml ./ml
+
+# 环境配置：CI/CD 在构建前用环境专属 Secret 渲染（见 DEPLOYMENT.md）；
+# 本地构建用仓库里手写的 .env（git 忽略），没有的话这行会报错
+COPY .env ./
 
 # 非 root 运行（容器逃逸面收敛）
 RUN useradd --create-home --uid "${APP_UID}" appuser \

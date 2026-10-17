@@ -21,6 +21,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # PDF 要求：merge -> staging/main 各用专属 Secret 渲染 .env，随镜像一起构建
+      # 整个文件内容放一个 Secret（STAGING_ENV_CONTENT / PROD_ENV_CONTENT），日志不漏单个 key
+      - name: Create staging .env from staging GitHub secret
+        if: github.ref == 'refs/heads/staging'
+        env:
+          ENV_CONTENT: ${{ secrets.STAGING_ENV_CONTENT }}
+        run: printf '%s\n' "$ENV_CONTENT" > .env
+
+      - name: Create production .env from production GitHub secret
+        if: github.ref == 'refs/heads/main'
+        env:
+          ENV_CONTENT: ${{ secrets.PROD_ENV_CONTENT }}
+        run: printf '%s\n' "$ENV_CONTENT" > .env
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

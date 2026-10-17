@@ -21,3 +21,7 @@ ml/registry/model_synthetic_backup.pkl
 ml/registry/*.md
 README.md
 DEPLOYMENT.md
+# 数据和实验记录不进镜像（太大了，而且推理用不到）
+data/
+mlruns/
+mlflow.db
