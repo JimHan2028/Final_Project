@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, staging, main]
+  push:
+    branches: [dev, staging, main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Tests (pytest)
+        run: pytest -v
+
+  # TODO(Docker)：Dockerfile 落地后追加镜像构建 job，PR 上构建失败同样阻止合并。
+  # 参考步骤：
+  #   docker build -t bank-marketing-api:${{ github.sha }} .
+  # staging / prod 的部署 job（GitHub Secrets 渲染 .env 后构建镜像）见 DEPLOYMENT.md。
