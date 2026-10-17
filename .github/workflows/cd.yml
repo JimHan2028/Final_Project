@@ -35,10 +35,11 @@ jobs:
           ENV_CONTENT: ${{ secrets.PROD_ENV_CONTENT }}
         run: printf '%s\n' "$ENV_CONTENT" > .env
 
+      # CD 流程不直接 pip install（装包发生在 Dockerfile 里），
+      # 不声明 cache: pip，避免 job 收尾报"无缓存可存"的红叉
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
 
       # 与 CI 一致：DVC 远端就绪后镜像里才是真模型
       - name: Pull model artifact (DVC)
