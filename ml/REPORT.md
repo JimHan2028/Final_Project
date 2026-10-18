@@ -3,9 +3,20 @@
 Propensity modelling for outbound telemarketing: model choice, threshold selection and
 leakage control, written up with the formulas behind each number.
 
+> **Reproducibility note (2026-10-18).** The numbers in this report come from the
+> experiment pipeline preserved at commit `4000fb6` (`ml/train.py --run ...`): 70/30
+> split, column-level v2 (`pdays` 999 gives `never_contacted`, `unknown` becomes NaN),
+> and PR-AUC, with the production threshold selected on a validation split. The current
+> `dev` and `main` HEADs ship a different production pipeline
+> (`ml/train.py --data ... --dataset-version ...`, row-level v2, ROC-AUC selection),
+> which produces different metrics. To reproduce this report, run the archived script at
+> `4000fb6`, not the current `dev`/`main` script. If you see
+> `train.py: error: unrecognized arguments: --run baseline`, you are running the current
+> checkout; switch to the `4000fb6` worktree described in §10.
+
 **Scope.** Every figure in this report is measured, not estimated. All numbers were read
 back from the three MLflow runs in experiment `bank-marketing` and reproduced with the
-commands in §12. Figures in this report are copies of the run artifacts under `figures/`.
+commands in §10. Figures in this report are copies of the run artifacts under `figures/`.
 Unless stated otherwise, every run uses the same stratified split (`seed=42`), so the
 comparisons are paired.
 
@@ -132,7 +143,7 @@ capacity:
 | `C` | 1.0 |
 | `solver` | `lbfgs` |
 | `max_iter` | 5000 (converged; the only reason for the cap is the `lbfgs` default of 100) |
-| `class_weight` | `None` (tested, rejected — §10) |
+| `class_weight` | `None` (tested, rejected — §9) |
 | `random_state` | 0 |
 
 ---
@@ -489,17 +500,39 @@ rule (§5).
 
 ---
 
-## 10. Reproducibility
+## 10. Reproducibility (historical report pipeline)
+
+These commands reproduce the report from the archived experiment commit `4000fb6`.
+They must be run from that commit's worktree; they are not the current `dev`/`main`
+training CLI. For the current production pipeline (8:2 split, ROC-AUC), see
+[`README_experiments.md`](README_experiments.md) and [`PROVENANCE.md`](PROVENANCE.md).
+
+> **If you see `train.py: error: unrecognized arguments: --run baseline`,** you are on
+> the current checkout. The `--run` CLI only exists at `4000fb6`; run the commands below
+> from that worktree.
 
 ```bash
-python ml/train.py --run baseline        # v1, expected PR-AUC 0.6064
-python ml/train.py --run v2_default      # v2, threshold 0.5, expected PR-AUC 0.4679
-python ml/train.py --run production      # v2, tuned threshold, expected PR-AUC 0.4679
+git worktree add /tmp/final-project-report 4000fb6
+cd /tmp/final-project-report
+# data/bank-additional-full.csv must be present (DVC pull or copy it in)
+python ml/train.py --run baseline   --tracking-uri sqlite:///mlflow_final.db
+python ml/train.py --run v2_default --tracking-uri sqlite:///mlflow_final.db
+python ml/train.py --run production --tracking-uri sqlite:///mlflow_final.db
 mlflow ui --backend-store-uri sqlite:///mlflow_final.db --port 5002
 ```
 
-Runs are deterministic given $\text{seed} = 42$: the split, the model's `random_state` and the
-threshold rule are all fixed, and the numbers above reproduce exactly.
+Verified at `4000fb6` with $\text{seed} = 42$:
+
+| Run | PR-AUC | Threshold |
+|---|---:|---:|
+| `baseline` | 0.6063798433 | 0.5 |
+| `v2_default` | 0.4679333091 | 0.5 |
+| `production` | 0.4679333091 | 0.4569169089 |
+
+The current `dev` and `main` HEADs no longer contain this experiment script. Their
+`ml/train.py` is the production-oriented implementation and uses a different v2 definition
+and metric set; running it will not reproduce the table above. Commit `4000fb6` remains in
+`main`'s history, so the worktree command above is valid from either branch.
 
 Port note: `--port 5002` is deliberate. Port 5000 is occupied on this machine by an older
 MLflow server from another checkout and by the macOS AirPlay Receiver, which binds `*:5000`
