@@ -1,46 +1,21 @@
 # Final Project — Bank Term Deposit Prediction (DevOps / MLOps)
 
-We trained a subscription-prediction model on the UCI Bank Marketing dataset and serve it through FastAPI.
-The project covers the full DevOps flow (Git / Docker / GitHub Actions CI/CD) plus the MLOps basics (DVC / MLflow).
+we train a model , it is a prediction about if a client would agree to describe the fixed deposit after calling this client. 
+This project use git ,docker ,CICD ,mlflow ,dvc
 
-## 1. What the app does
 
-- **Task**: given customer profile + campaign contact records + macro indicators, predict whether the customer will subscribe to a term deposit (binary yes/no).
-- **Data**: UCI Bank Marketing (41,188 rows x 21 cols); the `duration` column is target leakage, dropped in both training and inference.
-- **Model**: sklearn Pipeline (column preprocessing + classifier) serialized whole into `ml/registry/model.pkl`;
-  baseline is LogisticRegression, prod candidate is HistGradientBoostingClassifier (picked by ROC-AUC).
-- **Service**: FastAPI — `POST /predict` single prediction, `GET /health` health check, interactive docs at `/docs`.
+1. Data
+Input Data:
+age,professions,marriage,debt,education level,default record
+contact info,when contacting,how many times to contact
+last time activity,previous contact times,last result
+jobs change rate,consumer confidence index,Euribor rate,hired num
 
-### API contract (frozen on day 1)
-
-| item | agreement |
-| --- | --- |
-| input | `POST /predict`, 19 feature fields, see [app/schemas.py](app/schemas.py) |
-| output | `{"label": "yes\|no", "score": 0~1}` |
-| preprocessing | all inside the pkl Pipeline, caller does nothing |
-| model path | `ml/registry/model.pkl` |
-
-## 2. Quick start
-
-```bash
-pip install -r requirements.txt
-
-# train (logs to MLflow, writes ml/registry/model.pkl)
-python ml/train.py
-
-# start the service
-uvicorn app.main:app --reload --port 8000
-
-# tests + lint
-pytest -v
-ruff check .
-```
-
-## 3. Repo layout
-
-```
+2.directory
 .
-├── app/                  # FastAPI service (entrypoint / contract / model loader)
+├── app/                  # FastAPI service 
+        main.py
+        
 ├── ml/
 │   ├── train.py          # training script (calls MLflow)
 │   ├── data_pipeline.py  # preprocessing / feature engineering (shared by train & serve)
@@ -56,9 +31,28 @@ ruff check .
 ├── .github/workflows/    # ci.yml + cd.yml
 ├── DEPLOYMENT.md
 └── README.md
+
+
+
+3. Quick start
+
+```bash
+pip install -r requirements.txt
+
+# train (logs to MLflow, writes ml/registry/model.pkl)
+python ml/train.py
+
+# start the service
+uvicorn app.main:app --reload --port 8000
+
+# tests + lint
+pytest -v
+ruff check .
 ```
 
-## 4. CI/CD: from commit to prod
+
+
+4. CI/CD: from commit to prod
 
 **Branch model**: `feature/*` -> `dev` (integration) -> `staging` (pre-prod) -> `main` (prod), PR-only merges.
 
@@ -73,7 +67,7 @@ Typical path: `commit -> push feature/* -> PR to dev (CI gates) -> merge -> PR d
 
 Configs: [.github/workflows/ci.yml](.github/workflows/ci.yml) and [cd.yml](.github/workflows/cd.yml), deploy details in [DEPLOYMENT.md](DEPLOYMENT.md).
 
-## 5. MLOps
+5. MLOps
 
 ### Data versioning (DVC)
 
@@ -88,7 +82,7 @@ Configs: [.github/workflows/ci.yml](.github/workflows/ci.yml) and [cd.yml](.gith
 - 4 runs so far: 2 models x 2 dataset versions. Locally self-hosted: metadata `sqlite:///mlflow.db`, artifacts in `mlruns/`; just run `mlflow ui`.
 - Conclusions and prod-model choice: [ml/README_experiments.md](ml/README_experiments.md).
 
-## 6. Tests
+6. Tests
 
 47 pytest cases in three files, one scenario each:
 
@@ -97,6 +91,10 @@ Configs: [.github/workflows/ci.yml](.github/workflows/ci.yml) and [cd.yml](.gith
 - **edge cases** ([tests/test_edge_cases.py](tests/test_edge_cases.py)): unknown categories don't crash, unicode / extreme numerics, inference failure -> 500, fallback placeholder model.
 
 ---
+
+
+
+
 
 # Final Project —— 银行定期存款营销预测（DevOps / MLOps）
 

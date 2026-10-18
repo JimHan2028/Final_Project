@@ -1,26 +1,16 @@
 name: CI
-
-# 触发面：
-#   * PR / push 到主干与集成分支 —— 原有的门禁；
-#   * feature-app-api —— 应用分支自身的改动也要能立刻看到红灯，
-#     否则应用侧提交要等到合并进 dev 才被验证。
 on:
   pull_request:
     branches: [dev, staging, main, feature]
   push:
-    branches: [dev, staging, main, feature, feature-app-api]
+    branches: [dev, staging, main, feature, feature-app-api,feature-ml-rui]
   workflow_dispatch:
 
-# DVC 远端由模型/数据侧配置。仓库变量 DVC_REMOTE_READY 置为 true 后，
-# 「真模型门禁」从告警模式自动升级为硬失败（缺 pkl 直接红）。
 env:
   DVC_REMOTE_READY: ${{ vars.DVC_REMOTE_READY }}
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # 静态检查 + 单元测试（不依赖真实 pkl，FakeModel 兜底）
-  # ---------------------------------------------------------------------------
-  lint-and-test:
+    lint-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,9 +31,7 @@ jobs:
       - name: Tests (pytest)
         run: pytest -v
 
-  # ---------------------------------------------------------------------------
-  # 真模型门禁：必须是 DVC 拉下来的真实 pkl，杜绝 FakeModel 混进镜像
-  # ---------------------------------------------------------------------------
+  
   model-gate:
     runs-on: ubuntu-latest
     steps:
@@ -103,7 +91,7 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      # 构建上下文里必须有 pkl，否则镜像里只会是 FakeModel
+      # must have pkl when building
       - name: Pull model artifact (DVC)
         if: vars.DVC_REMOTE_READY == 'true'
         run: |
