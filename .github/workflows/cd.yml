@@ -1,12 +1,10 @@
 name: CD
-
-# 只在 staging / main 上构建并推送镜像；feature 分支走 CI 的 docker job 验证构建，
-# 不污染镜像仓库。需要验证推送链路时用 workflow_dispatch 手动触发。
 on:
   push:
     branches: [staging, main]
   workflow_dispatch:
 
+# github container registry
 env:
   REGISTRY: ghcr.io
 
@@ -16,13 +14,12 @@ jobs:
     permissions:
       contents: read
       packages: write
-    # GitHub Environments 卡点：production 可配置必须人工批准
+    # GitHub Environments 
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
       - uses: actions/checkout@v4
 
-      # PDF 要求：merge -> staging/main 各用专属 Secret 渲染 .env，随镜像一起构建
-      # 整个文件内容放一个 Secret（STAGING_ENV_CONTENT / PROD_ENV_CONTENT），日志不漏单个 key
+      # make .env
       - name: Create staging .env from staging GitHub secret
         if: github.ref == 'refs/heads/staging'
         env:
@@ -35,20 +32,19 @@ jobs:
           ENV_CONTENT: ${{ secrets.PROD_ENV_CONTENT }}
         run: printf '%s\n' "$ENV_CONTENT" > .env
 
-      # CD 流程不直接 pip install（装包发生在 Dockerfile 里），
-      # 不声明 cache: pip，避免 job 收尾报"无缓存可存"的红叉
+      # pip cache bug
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      # 与 CI 一致：DVC 远端就绪后镜像里才是真模型
+      # pull real model (not use)
       - name: Pull model artifact (DVC)
         if: vars.DVC_REMOTE_READY == 'true'
         run: |
           pip install "dvc[azure]"
           dvc pull ml/registry/model.pkl.dvc
 
-      # GHCR 要求镜像名全小写，GitHub 仓库名含大小写，这里统一转换
+      
       - name: Compute image name
         run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
@@ -58,7 +54,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
+      # tags
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
