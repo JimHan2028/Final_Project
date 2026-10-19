@@ -42,12 +42,6 @@ _model: Any = None
 
 
 class FakeModel:
-    """占位模型：只为跑通链路，不做任何真实预测。
-
-    警告：占位模型无法暴露 pkl 的版本兼容问题，模型回填后必须用真实 pkl
-    做一次集成验证（启动后 /health 应显示 model_loaded=true）。
-    """
-
     is_fake = True
 
     def predict(self, records: Sequence[Mapping[str, Any]]) -> list[str]:
@@ -116,11 +110,6 @@ def _positive_index(model: Any) -> int | None:
 
 
 def _proba_to_scores(model: Any, frame: Any) -> list[float]:
-    """取「yes 类概率」作为 score。
-
-    predict_proba 的列顺序跟 classes_ 对齐，不能简单取 max，
-    否则 score 会变成预测类的置信度（预测 no 时 score 接近 1，语义相反）。
-    """
     proba = model.predict_proba(frame)
     index = _positive_index(model)
     if index is None:
@@ -143,11 +132,6 @@ def _decision_to_scores(raw: Any) -> list[float]:
 
 
 def _records_to_frame(records: Sequence[Mapping[str, Any]]):
-    """把记录字典列表转成带固定列序的 DataFrame（契约第 3 条）。
-
-    延迟导入 pandas / ml.data_pipeline：真实模型路径下两者必然可用
-    （反序列化 pkl 本身就需要），占位模型路径下则完全不依赖。
-    """
     import pandas as pd
 
     from ml.data_pipeline import FEATURE_COLUMNS

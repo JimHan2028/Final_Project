@@ -25,10 +25,7 @@ COPY app ./app
 # 模型侧契约：ml/data_pipeline.py 提供 FEATURE_COLUMNS，ml/registry/model.pkl 为真实产物
 COPY ml ./ml
 
-# 环境配置：CI/CD 在构建前用环境专属 Secret 渲染（见 DEPLOYMENT.md）；
-# 本地构建用仓库里手写的 .env（git 忽略），没有的话这行会报错
-COPY .env ./
-
+COPY .env .
 # 非 root 运行（容器逃逸面收敛）
 RUN useradd --create-home --uid "${APP_UID}" appuser \
     && chown -R appuser:appuser /app

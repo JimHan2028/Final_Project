@@ -1,12 +1,3 @@
-"""数据加载与预处理管线 —— 训练与推理共用的唯一事实来源。
-
-职责：
-  * 读取 UCI Bank Marketing 数据集并做列名规范化（点号 → 下划线）；
-  * 定义特征列序（契约第 3 条）：顺序固定，推理端按此构造 DataFrame；
-  * 构建完整 sklearn Pipeline（列变换 + 分类器），序列化进 pkl 后，
-    应用端无需再做任何预处理。
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,8 +13,7 @@ DEFAULT_DATA_PATH = PROJECT_ROOT / "data" / "bank-additional-full.csv"
 
 TARGET_COLUMN = "y"
 
-# duration（通话时长）只在通话结束后才知道，属于目标泄漏特征，
-# 真实预测场景拿不到，训练与推理均剔除
+# add duration to leakage
 LEAKAGE_COLUMNS = ("duration",)
 
 NUMERIC_COLUMNS = (
@@ -81,10 +71,6 @@ assert set(NUMERIC_COLUMNS) | set(CATEGORICAL_COLUMNS) == set(FEATURE_COLUMNS), 
 
 
 def load_dataframe(path: Path = DEFAULT_DATA_PATH) -> pd.DataFrame:
-    """读取原始 CSV（分号分隔），并把列名统一为下划线风格。
-
-    例：emp.var.rate → emp_var_rate，与 app/schemas.py 的字段名保持一致。
-    """
     frame = pd.read_csv(path, sep=";")
     frame.columns = [str(column).replace(".", "_") for column in frame.columns]
 
