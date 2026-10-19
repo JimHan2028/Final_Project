@@ -54,7 +54,8 @@ ruff check .
 
 4. CI/CD: from commit to prod
 
-**Branch model**: `feature/*` -> `dev` (integration) -> `staging` (pre-prod) -> `main` (prod), PR-only merges.
+CI-Branch(pr/push): feature->dev->staging->main
+CD-Branch(push): dev->staging and staging->main
 
 | trigger | pipeline action |
 | --- | --- |
@@ -82,17 +83,88 @@ Configs: [.github/workflows/ci.yml](.github/workflows/ci.yml) and [cd.yml](.gith
 - 4 runs so far: 2 models x 2 dataset versions. Locally self-hosted: metadata `sqlite:///mlflow.db`, artifacts in `mlruns/`; just run `mlflow ui`.
 - Conclusions and prod-model choice: [ml/README_experiments.md](ml/README_experiments.md).
 
-6. Tests
+6. PyTest
 
-47 pytest cases in three files, one scenario each:
+47 pytest cases 
+unit test:
+test_schema: missing fields / wrong types / out-of-range / blank categories / extra fields -> 422; boundary values pass;
+test_score_semantics: contract shape, valid categories, score range, inference determinism, OpenAPI;
+intergration test:
+test_edge_cases: unknown categories don't crash, unicode / extreme numerics, inference failure -> 500, fallback placeholder model.
+test_predict:Port
 
-- **input validation** ([tests/test_schema.py](tests/test_schema.py)): missing fields / wrong types / out-of-range / blank categories / extra fields -> 422; boundary values pass;
-- **happy path** ([tests/test_predict.py](tests/test_predict.py)): contract shape, valid categories, score range, inference determinism, OpenAPI;
-- **edge cases** ([tests/test_edge_cases.py](tests/test_edge_cases.py)): unknown categories don't crash, unicode / extreme numerics, inference failure -> 500, fallback placeholder model.
 
----
+7.How to test all function
+<!-- to see dvc remote list -->
+dvc remote list   
 
+<!-- see local dvc file-->
+Get-Content data\bank-additional-full.csv.dvc  
+Get-Content data\bank-additional-v2.csv.dvc
 
+<!-- see local md5 file -->
+Get-ChildItem .dvc\cache\files\md5 -Recurse -Name
+
+<!-- pull data from remote -->
+dvc pull data\bank-additional-full.csv.dvc
+dvc pull data\bank-additional-v2.csv.dvc
+
+<!-- run pytest cases -->
+pytest -v   #to run all pytest cases
+
+<!-- push data to remote -->
+dvc push
+
+<!-- dvc status -->
+dvc status
+
+ruff check .
+
+<!-- FastAPI -->
+uvicorn app.main:app --port 8000
+
+Invoke-RestMethod http://127.0.0.1:8000/health
+
+$body = @{
+  age = 35
+  job = "admin."
+  marital = "married"
+  education = "university.degree"
+  default = "no"
+  housing = "yes"
+  loan = "no"
+  contact = "cellular"
+  month = "may"
+  day_of_week = "mon"
+  campaign = 2
+  pdays = 999
+  previous = 0
+  poutcome = "nonexistent"
+  emp_var_rate = -1.8
+  cons_price_idx = 92.893
+  cons_conf_idx = -46.2
+  euribor3m = 1.3
+  nr_employed = 5099.1
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri http://127.0.0.1:8000/predict -Method Post -Body $body -ContentType "application/json"
+
+<!-- Docker -->
+docker build -t bank-marketing-api:local .
+
+docker images bank-marketing-api
+
+docker run -d --name bank-api -p 8001:8000 bank-marketing-api:local
+
+Start-Sleep -Seconds 30
+
+docker inspect --format "{{.State.Health.Status}}" bank-api
+
+<!-- E2E -->
+Invoke-RestMethod http://127.0.0.1:8001/health
+Invoke-RestMethod -Uri http://127.0.0.1:8001/predict -Method Post -Body $body -ContentType "application/json"
+
+docker rm -f bank-api
 
 
 
