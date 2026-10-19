@@ -71,10 +71,6 @@ assert set(NUMERIC_COLUMNS) | set(CATEGORICAL_COLUMNS) == set(FEATURE_COLUMNS), 
 
 
 def load_dataframe(path: Path = DEFAULT_DATA_PATH) -> pd.DataFrame:
-    """读取原始 CSV（分号分隔），并把列名统一为下划线风格。
-
-    例：emp.var.rate → emp_var_rate，与 app/schemas.py 的字段名保持一致。
-    """
     frame = pd.read_csv(path, sep=";")
     frame.columns = [str(column).replace(".", "_") for column in frame.columns]
 

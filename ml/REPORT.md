@@ -33,37 +33,37 @@ the comparisons are paired.
 
 ## 2. Data
 
-| | |
-|---|---|
-| Source | UCI ML Repository id 222, *Bank Marketing* (`bank-additional-full.csv`, semicolon separated) |
-| Files | `data/bank-additional-full.csv` (v1), `data/bank-additional-v2.csv` (v2) |
-| md5 (v1) | `f6cb2c1256ffe2836b36df321f46e92c` |
-| md5 (v2) | `e8a1add9000aa97898f84ceddfbe32ac` |
-| Target | `y ∈ {no, yes}`, positive = `"yes"` |
+|          |                                                                                              |
+|----------|----------------------------------------------------------------------------------------------|
+| Source   | UCI ML Repository id 222, *Bank Marketing* (`bank-additional-full.csv`, semicolon separated) |
+| Files    | `data/bank-additional-full.csv` (v1), `data/bank-additional-v2.csv` (v2)                     |
+| md5 (v1) | `f6cb2c1256ffe2836b36df321f46e92c`                                                           |
+| md5 (v2) | `e8a1add9000aa97898f84ceddfbe32ac`                                                           |
+| Target   | `y ∈ {no, yes}`, positive = `"yes"`                                                          |
 
 v1 is the file as published. v2 is derived from it by `ml/make_v2_data.py`, so the two
 versions differ by a recorded, rerunnable transformation rather than by a second download.
 Both versions are tracked by DVC; git stores the `.dvc` pointers, Azure Blob stores the
 content.
 
-| | v1 (as published) | v2 (cleaned) |
-|---|---|---|
-| Rows | 41,188 | 41,016 (−172) |
-| Positives | 4,640 (11.2654 %) | 4,638 (11.3078 %) |
-| Features | 19 | 19 |
-| `duration` | **dropped** (target leakage, §7.1) | **dropped** (§7.1) |
-| `education` | `basic.4y / basic.9y / basic.6y` as separate levels | merged into `basic` |
-| `campaign > 20` rows | kept (harassment-style outlier call volumes) | **removed** |
-| duplicate rows | kept | **removed** |
+|                      | v1 (as published)                                   | v2 (cleaned)        |
+|----------------------|-----------------------------------------------------|---------------------|
+| Rows                 | 41,188                                              | 41,016 (−172)       |
+| Positives            | 4,640 (11.2654 %)                                   | 4,638 (11.3078 %)   |
+| Features             | 19                                                  | 19                  |
+| `duration`           | **dropped** (target leakage, §7.1)                  | **dropped** (§7.1)  |
+| `education`          | `basic.4y / basic.9y / basic.6y` as separate levels | merged into `basic` |
+| `campaign > 20` rows | kept (harassment-style outlier call volumes)        | **removed**         |
+| duplicate rows       | kept                                                | **removed**         |
 
 ### Split
 
 Stratified on the target, `seed = 42`, 80/20 (logged per run as `train_rows` / `test_rows`):
 
 | Data version | Train rows | Test rows |
-|---|---|---|
-| v1 | 32,950 | 8,238 |
-| v2 | 32,812 | 8,204 |
+|--------------|------------|-----------|
+| v1           | 32,950     | 8,238     |
+| v2           | 32,812     | 8,204     |
 
 The split is the only random act in the pipeline and is pinned by `random_state=42`, so
 all four runs are paired on the same rows within a data version.
@@ -101,9 +101,9 @@ re-implements preprocessing.
 
 ### 3.2 Candidates
 
-| | `logreg_baseline` | `hgb_improved` |
-|---|---|---|
-| Class | `LogisticRegression` | `HistGradientBoostingClassifier` |
+|                 | `logreg_baseline`                                             | `hgb_improved`                      |
+|-----------------|---------------------------------------------------------------|-------------------------------------|
+| Class           | `LogisticRegression`                                          | `HistGradientBoostingClassifier`    |
 | Hyperparameters | `max_iter=1000`, `class_weight="balanced"`, `random_state=42` | library defaults, `random_state=42` |
 
 `class_weight="balanced"` on the linear model is the classic answer to the 11.3 % positive
@@ -209,25 +209,25 @@ ranking, not a retrain.
 
 ## 6. Results
 
-All four runs, test set (8,238 rows / 1,392 positives for v1; 8,204 rows for v2):
+All four runs, test set (8,238 rows / 928 positives for v1; 8,204 rows for v2):
 
-| | `logreg_baseline` v1 | `hgb_improved` v1 | `logreg_baseline` v2 | `hgb_improved` v2 |
-|---|---|---|---|---|
-| Data version | v1 | v1 | v2 | v2 |
-| Features | 19 | 19 | 19 | 19 |
-| **ROC-AUC** | 0.8009 | **0.8141** | 0.8021 | **0.8156** |
-| Accuracy | 0.8350 | **0.9025** | 0.8329 | 0.9021 |
-| f1 (positive) | **0.4689** | 0.3837 | 0.4621 | 0.3662 |
-| Shipped | no | **yes** | no | no |
+|               | `logreg_baseline` v1 | `hgb_improved` v1 | `logreg_baseline` v2 | `hgb_improved` v2 |
+|---------------|----------------------|-------------------|----------------------|-------------------|
+| Data version  | v1                   | v1                | v2                   | v2                |
+| Features      | 19                   | 19                | 19                   | 19                |
+| **ROC-AUC**   | 0.8009               | **0.8141**        | 0.8021               | **0.8156**        |
+| Accuracy      | 0.8350               | **0.9025**        | 0.8329               | 0.9021            |
+| f1 (positive) | **0.4689**           | 0.3837            | 0.4621               | 0.3662            |
+| Shipped       | no                   | **yes**           | no                   | no                |
 
 MLflow run ids (tracking store `sqlite:///mlflow.db`):
 
-| Run | Run id |
-|---|---|
+| Run                    | Run id                             |
+|------------------------|------------------------------------|
 | `logreg_baseline` (v1) | `24182ba979104956bdb3faf3b369d66a` |
-| `hgb_improved` (v1) | `fbab6806fab4401a8643e861085c693b` |
+| `hgb_improved` (v1)    | `fbab6806fab4401a8643e861085c693b` |
 | `logreg_baseline` (v2) | `48ae369350624a3aa77c0a91ec6b218c` |
-| `hgb_improved` (v2) | `fbdf0b31d4884473a9129ca6c6295ddb` |
+| `hgb_improved` (v2)    | `fbdf0b31d4884473a9129ca6c6295ddb` |
 
 ### 6.1 Reading the table
 
@@ -266,10 +266,10 @@ attribute *"highly affects the output target ... should only be included for ben
 purposes and should be discarded if the intention is to have a realistic predictive
 model."* The effect is large:
 
-| | Mean `duration` |
-|---|---|
-| Subscribers ($y=1$) | 553.2 s |
-| Non-subscribers ($y=0$) | 220.8 s |
+|                         | Mean `duration` |
+|-------------------------|-----------------|
+| Subscribers ($y=1$)     | 553.2 s         |
+| Non-subscribers ($y=0$) | 220.8 s         |
 
 so the column separates the classes almost by itself, and it also inverts causality: a
 long call is a *consequence* of a customer who engaged, not a cause available beforehand.
@@ -293,11 +293,11 @@ convention.
 v2 (`ml/make_v2_data.py`, output tracked as `data/bank-additional-v2.csv.dvc`) makes three
 recorded transformations of v1:
 
-| Change | Motivation | Measured effect |
-|---|---|---|
-| Merge `basic.4y` / `basic.9y` / `basic.6y` education levels into `basic` | three near-duplicate sparse levels give the encoder almost no per-level signal | row count unchanged |
-| Drop rows with `campaign > 20` | harassment-style outlier call volumes are atypical operational behaviour that would bias the "number of contacts" feature | 41,188 → 41,016 rows, positives 4,640 → 4,638 |
-| Drop exact duplicate rows | deduplicated record keeping | included in the row count above |
+| Change                                                                   | Motivation                                                                                                                | Measured effect                               |
+|--------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|
+| Merge `basic.4y` / `basic.9y` / `basic.6y` education levels into `basic` | three near-duplicate sparse levels give the encoder almost no per-level signal                                            | row count unchanged                           |
+| Drop rows with `campaign > 20`                                           | harassment-style outlier call volumes are atypical operational behaviour that would bias the "number of contacts" feature | 41,188 → 41,016 rows, positives 4,640 → 4,638 |
+| Drop exact duplicate rows                                                | deduplicated record keeping                                                                                               | included in the row count above               |
 
 The measured outcome is §6's $+0.0015$ ROC-AUC: recorded, kept in DVC, not promoted —
 which is the data-versioning workflow doing its job. The next data version earns its way
@@ -324,15 +324,15 @@ Runs are deterministic given `seed = 42`: the stratified split, both models'
 Every run logs what produced it, so "which dataset made this model" is answerable without
 memory:
 
-| Step | Identifier | Logged as |
-|---|---|---|
-| Data content | md5 `f6cb2c…` / `e8a1add…` | `data_md5` tag |
-| Data version | `v1` / `v2` | `dataset_version` tag + param |
-| Code | git SHA | `git_commit` tag |
-| Split | 32,950/8,238 (v1), 32,812/8,204 (v2) | `train_rows` / `test_rows` params |
-| Hyperparameters | all classifier params | `clf_*` params |
-| Metrics | accuracy, f1, roc_auc | metrics |
-| Artifacts | confusion matrix, shipped pkl | `plots/`, `model/` |
+| Step            | Identifier                           | Logged as                         |
+|-----------------|--------------------------------------|-----------------------------------|
+| Data content    | md5 `f6cb2c…` / `e8a1add…`           | `data_md5` tag                    |
+| Data version    | `v1` / `v2`                          | `dataset_version` tag + param     |
+| Code            | git SHA                              | `git_commit` tag                  |
+| Split           | 32,950/8,238 (v1), 32,812/8,204 (v2) | `train_rows` / `test_rows` params |
+| Hyperparameters | all classifier params                | `clf_*` params                    |
+| Metrics         | accuracy, f1, roc_auc                | metrics                           |
+| Artifacts       | confusion matrix, shipped pkl        | `plots/`, `model/`                |
 
 The DVC pointers (`data/*.csv.dvc`) carry the same md5s as the `data_md5` tags, so the
 MLflow store and the data store agree on what "v1" and "v2" mean without a human in the

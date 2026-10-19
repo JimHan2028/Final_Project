@@ -82,6 +82,7 @@ dvc remote list
 <!-- see local dvc file-->
 Get-Content data\bank-additional-full.csv.dvc  
 Get-Content data\bank-additional-v2.csv.dvc
+Get-Content ml\registry\model.pkl.dvc
 
 <!-- see local md5 file -->
 Get-ChildItem .dvc\cache\files\md5 -Recurse -Name
@@ -89,7 +90,7 @@ Get-ChildItem .dvc\cache\files\md5 -Recurse -Name
 <!-- pull data from remote -->
 dvc pull data\bank-additional-full.csv.dvc
 dvc pull data\bank-additional-v2.csv.dvc
-
+dvc pull ml\registry\model.pkl.dvc
 
 <!-- push data to remote -->
 dvc push
