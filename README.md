@@ -109,8 +109,6 @@ Get-ChildItem .dvc\cache\files\md5 -Recurse -Name
 dvc pull data\bank-additional-full.csv.dvc
 dvc pull data\bank-additional-v2.csv.dvc
 
-<!-- run pytest cases -->
-pytest -v   #to run all pytest cases
 
 <!-- push data to remote -->
 dvc push
@@ -118,38 +116,50 @@ dvc push
 <!-- dvc status -->
 dvc status
 
+<!-- check mlflow ui -->
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+
+<!-- lint -->
 ruff check .
 
-<!-- FastAPI -->
+<!-- format -->
+ruff format check .
+
+<!-- run pytest cases -->
+pytest -v   
+
+<!--FastAPI -->
 uvicorn app.main:app --port 8000
 
 Invoke-RestMethod http://127.0.0.1:8000/health
 
-$body = @{
-  age = 35
-  job = "admin."
-  marital = "married"
-  education = "university.degree"
-  default = "no"
-  housing = "yes"
-  loan = "no"
-  contact = "cellular"
-  month = "may"
-  day_of_week = "mon"
-  campaign = 2
-  pdays = 999
-  previous = 0
-  poutcome = "nonexistent"
-  emp_var_rate = -1.8
-  cons_price_idx = 92.893
-  cons_conf_idx = -46.2
-  euribor3m = 1.3
-  nr_employed = 5099.1
-} | ConvertTo-Json
+$jsonData = @'
+{
+  "age": 35,
+  "job": "admin.",
+  "marital": "married",
+  "education": "university.degree",
+  "default": "no",
+  "housing": "yes",
+  "loan": "no",
+  "contact": "cellular",
+  "month": "may",
+  "day_of_week": "mon",
+  "campaign": 2,
+  "pdays": 999,
+  "previous": 0,
+  "poutcome": "nonexistent",
+  "emp_var_rate": -1.8,
+  "cons_price_idx": 92.893,
+  "cons_conf_idx": -46.2,
+  "euribor3m": 1.3,
+  "nr_employed": 5099.1
+}
+'@
 
-Invoke-RestMethod -Uri http://127.0.0.1:8000/predict -Method Post -Body $body -ContentType "application/json"
+Invoke-RestMethod -Uri http://127.0.0.1:8001/predict -Method Post -Body $jsonData -ContentType "application/json"
 
-<!-- Docker -->
+<!--Docker -->
 docker build -t bank-marketing-api:local .
 
 docker images bank-marketing-api
@@ -160,11 +170,12 @@ Start-Sleep -Seconds 30
 
 docker inspect --format "{{.State.Health.Status}}" bank-api
 
-<!-- E2E -->
+<!--E2E -->
 Invoke-RestMethod http://127.0.0.1:8001/health
 Invoke-RestMethod -Uri http://127.0.0.1:8001/predict -Method Post -Body $body -ContentType "application/json"
 
 docker rm -f bank-api
+
 
 
 
