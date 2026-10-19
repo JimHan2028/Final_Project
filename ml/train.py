@@ -1,3 +1,20 @@
+"""训练脚本 —— 银行定期存款营销预测（UCI Bank Marketing）。
+
+用法（在项目根目录执行）：
+    python ml/train.py                                  # v1 数据
+    python ml/train.py --data data/bank-additional-v2.csv --dataset-version v2
+    python ml/train.py --model-path ml/registry/model_v1.pkl   # 指定输出 pkl
+    python ml/train.py --no-save                        # 只出实验结果，不覆盖 model.pkl
+
+每次运行会：
+  1. 读取数据集（DVC 跟踪的 data/，默认 v1）；
+  2. 分层划分训练 / 测试集；
+  3. 逐个训练候选模型，向 MLflow（本地 sqlite + mlruns/）记录
+     git commit、数据集版本、超参数、指标与混淆矩阵产物；
+  4. 以 ROC-AUC 择优，把最优 Pipeline 保存到 ml/registry/model.pkl
+     （加 --no-save 则只记录不落盘，用于比数据版本）。
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -213,6 +230,12 @@ def main() -> None:
         action="store_true",
         help="只记录实验不覆盖 ml/registry/model.pkl",
     )
+    parser.add_argument(
+        "--model-path",
+        type=Path,
+        default=MODEL_PATH,
+        help="模型输出路径（默认 ml/registry/model.pkl）",
+    )
     args = parser.parse_args()
 
     if not args.data.exists():
@@ -253,13 +276,14 @@ def main() -> None:
     # 择优标准：ROC-AUC（正类占比仅 ~11%，AUC 对类别不平衡最稳健）
     best = max(results, key=lambda item: item["metrics"]["roc_auc"])
 
+    model_path = args.model_path
     if not args.no_save:
-        REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
-        joblib.dump(best["pipeline"], MODEL_PATH)
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(best["pipeline"], model_path)
 
         # 回到最优 run，把最终 pkl 也作为 artifact 归档
         with mlflow.start_run(run_id=best["run_id"]):
-            mlflow.log_artifact(str(MODEL_PATH), artifact_path="model")
+            mlflow.log_artifact(str(model_path), artifact_path="model")
             mlflow.set_tag("prod_candidate", "true")
 
     print("\n=== 训练完成 ===")
@@ -271,7 +295,7 @@ def main() -> None:
     if args.no_save:
         print("本次 --no-save：registry 里的 model.pkl 没动")
     else:
-        print(f"最优模型已保存：{MODEL_PATH}")
+        print(f"最优模型已保存：{model_path}")
     print(f"MLflow：sqlite:///{SQLITE_DB_PATH.as_posix()}（产物在 {MLRUNS_DIR}）")
 
 
