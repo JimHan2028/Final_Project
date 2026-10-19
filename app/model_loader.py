@@ -12,15 +12,28 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# 契约第 4 条：模型路径固定，相对项目根定位，不写死绝对路径
+# 契约第 4 条：默认模型路径固定，相对项目根定位，不写死绝对路径。
+# 需要切换 v1/v2 产物时，用 MODEL_PATH 环境变量覆盖（相对路径按项目根解析）。
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_PATH = PROJECT_ROOT / "ml" / "registry" / "model.pkl"
+DEFAULT_MODEL_PATH = PROJECT_ROOT / "ml" / "registry" / "model.pkl"
+
+
+def _resolve_model_path() -> Path:
+    configured = os.environ.get("MODEL_PATH")
+    if not configured:
+        return DEFAULT_MODEL_PATH
+    path = Path(configured)
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+MODEL_PATH = _resolve_model_path()
 
 # 契约第 2 条：score 是「正类（认购）概率」，不是预测类的置信度
 POSITIVE_LABEL = "yes"
@@ -41,9 +54,12 @@ class FakeModel:
         return ["no"] * len(list(records))
 
 
-def load_model(path: Path = MODEL_PATH) -> Any:
+def load_model(path: Path | None = None) -> Any:
     """加载模型并写入进程内单例。"""
     global _model
+
+    if path is None:
+        path = _resolve_model_path()
 
     if not path.exists():
         logger.warning("模型文件不存在（%s），回落到占位模型", path)
