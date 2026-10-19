@@ -1,148 +1,135 @@
 name: CI
-
-# 触发面：
-#   * PR / push 到主干与集成分支 —— 原有的门禁；
-#   * feature-app-api —— 应用分支自身的改动也要能立刻看到红灯，
-#     否则应用侧提交要等到合并进 dev 才被验证。
 on:
   pull_request:
     branches: [dev, staging, main, feature]
   push:
-    branches: [dev, staging, main, feature, feature-app-api]
+    branches: [dev, staging, main, feature, feature-app-api,feature-ml-rui]
   workflow_dispatch:
 
-# DVC 远端由模型/数据侧配置。仓库变量 DVC_REMOTE_READY 置为 true 后，
-# 「真模型门禁」从告警模式自动升级为硬失败（缺 pkl 直接红）。
 env:
   DVC_REMOTE_READY: ${{ vars.DVC_REMOTE_READY }}
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # 静态检查 + 单元测试（不依赖真实 pkl，FakeModel 兜底）
-  # ---------------------------------------------------------------------------
-  lint-and-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    lint-and-test:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
+        - uses: actions/setup-python@v5
+          with:
+            python-version: "3.12"
+            cache: pip
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+        - name: Install dependencies
+          run: pip install -r requirements.txt
 
-      - name: Lint (ruff)
-        run: |
-          ruff check .
-          ruff format --check .
+        - name: Lint (ruff)
+          run: |
+            ruff check .
+            ruff format --check .
 
-      - name: Tests (pytest)
-        run: pytest -v
+        - name: Tests (pytest)
+          run: pytest -v
 
-  # ---------------------------------------------------------------------------
-  # 真模型门禁：必须是 DVC 拉下来的真实 pkl，杜绝 FakeModel 混进镜像
-  # ---------------------------------------------------------------------------
-  model-gate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  
+    model-gate:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
+        - uses: actions/setup-python@v5
+          with:
+            python-version: "3.12"
+            cache: pip
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+        - name: Install dependencies
+          run: pip install -r requirements.txt
 
-      - name: Pull model artifact (DVC)
-        if: vars.DVC_REMOTE_READY == 'true'
-        run: |
-          pip install "dvc[azure]"
-          dvc pull ml/registry/model.pkl.dvc
+        - name: Pull model artifact (DVC)
+          if: vars.DVC_REMOTE_READY == 'true'
+          run: |
+            pip install "dvc[azure]"
+            dvc pull ml/registry/model.pkl.dvc
 
-      - name: Assert real model (not FakeModel)
-        run: |
-          python - <<'PY'
-          import os
-          import sys
+        - name: Assert real model (not FakeModel)
+          run: |
+            python - <<'PY'
+            import os
+            import sys
+  
+            from app import model_loader
+  
+            strict = os.environ.get("DVC_REMOTE_READY") == "true"
+            model_loader.load_model()
+  
+            if model_loader.is_fake():
+                message = (
+                    "ml/registry/model.pkl 未就位，当前回落到 FakeModel。"
+                    "DVC 远端配好后将仓库变量 DVC_REMOTE_READY 置为 true 即为硬门禁。"
+                )
+                if strict:
+                    sys.exit(f"ERROR: {message}")
+                print(f"::warning::{message}")
+                sys.exit(0)
+  
+            model = model_loader.get_model()
+            print(f"OK: real model loaded -> {type(model).__name__}")
+            assert hasattr(model, "predict"), "真实模型缺少 predict 接口"
+            PY
 
-          from app import model_loader
+#    docker test and smoking test
+    docker:
+      needs: lint-and-test
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
 
-          strict = os.environ.get("DVC_REMOTE_READY") == "true"
-          model_loader.load_model()
+        - uses: actions/setup-python@v5
+          with:
+            python-version: "3.12"
+            cache: pip
 
-          if model_loader.is_fake():
-              message = (
-                  "ml/registry/model.pkl 未就位，当前回落到 FakeModel。"
-                  "DVC 远端配好后将仓库变量 DVC_REMOTE_READY 置为 true 即为硬门禁。"
-              )
-              if strict:
-                  sys.exit(f"ERROR: {message}")
-              print(f"::warning::{message}")
-              sys.exit(0)
+        # must have pkl when building
+        - name: Pull model artifact (DVC)
+          if: vars.DVC_REMOTE_READY == 'true'
+          run: |
+            pip install "dvc[azure]"
+            dvc pull ml/registry/model.pkl.dvc
 
-          model = model_loader.get_model()
-          print(f"OK: real model loaded -> {type(model).__name__}")
-          assert hasattr(model, "predict"), "真实模型缺少 predict 接口"
-          PY
+        # .env 被 git 忽略不会进 checkout，Dockerfile 又 COPY 它，这里写个占位
+        # （真实环境的 .env 由 CD 用 Secret 渲染，CI 只验证构建链路）
+        - name: Create placeholder .env
+          run: printf 'APP_ENV=ci\nLOG_LEVEL=info\n' > .env
 
-  # ---------------------------------------------------------------------------
-  # 镜像构建 + 容器冒烟（PR 上构建失败同样阻止合并）
-  # ---------------------------------------------------------------------------
-  docker:
-    needs: lint-and-test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+        - name: Build image
+          run: docker build -t bank-marketing-api:ci .
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      # 构建上下文里必须有 pkl，否则镜像里只会是 FakeModel
-      - name: Pull model artifact (DVC)
-        if: vars.DVC_REMOTE_READY == 'true'
-        run: |
-          pip install "dvc[azure]"
-          dvc pull ml/registry/model.pkl.dvc
-
-      # .env 被 git 忽略不会进 checkout，Dockerfile 又 COPY 它，这里写个占位
-      # （真实环境的 .env 由 CD 用 Secret 渲染，CI 只验证构建链路）
-      - name: Create placeholder .env
-        run: printf 'APP_ENV=ci\nLOG_LEVEL=info\n' > .env
-
-      - name: Build image
-        run: docker build -t bank-marketing-api:ci .
-
-      - name: Smoke test container
-        env:
-          DVC_REMOTE_READY: ${{ vars.DVC_REMOTE_READY }}
-        run: |
-          set -euo pipefail
-          docker run -d --name api -p 8000:8000 bank-marketing-api:ci
-          ok=0
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/health > /tmp/health.json 2>/dev/null; then
-              ok=1
-              break
+        - name: Smoke test container
+          env:
+            DVC_REMOTE_READY: ${{ vars.DVC_REMOTE_READY }}
+          run: |
+            set -euo pipefail
+            docker run -d --name api -p 8000:8000 bank-marketing-api:ci
+            ok=0
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:8000/health > /tmp/health.json 2>/dev/null; then
+                ok=1
+                break
+              fi
+              sleep 2
+            done
+            cat /tmp/health.json || true
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::容器 60s 内未就绪"
+              docker logs api
+              exit 1
             fi
-            sleep 2
-          done
-          cat /tmp/health.json || true
-          if [ "$ok" -ne 1 ]; then
-            echo "::error::容器 60s 内未就绪"
-            docker logs api
-            exit 1
-          fi
-          if [ "${DVC_REMOTE_READY}" = "true" ]; then
-            grep -q '"model_loaded":true' /tmp/health.json \
-              || { echo "::error::镜像内模型未加载（model_loaded != true）"; docker logs api; exit 1; }
-          fi
+            if [ "${DVC_REMOTE_READY}" = "true" ]; then
+              grep -q '"model_loaded":true' /tmp/health.json \
+                || { echo "::error::镜像内模型未加载（model_loaded != true）"; docker logs api; exit 1; }
+            fi
 
-      - name: Container logs on failure
-        if: failure()
-        run: docker logs api || true
+        - name: Container logs on failure
+          if: failure()
+          run: docker logs api || true
+

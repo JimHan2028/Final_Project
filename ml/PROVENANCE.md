@@ -34,6 +34,19 @@ python ml/train.py --data data/bank-additional-v2.csv --dataset-version v2 --no-
 mlflow ui                       # browse run history
 ```
 
+To keep both artifacts side by side:
+
+```bash
+python ml/train.py --data data/bank-additional-full.csv --dataset-version v1 \
+  --model-path ml/registry/model_v1.pkl
+python ml/train.py --data data/bank-additional-v2.csv --dataset-version v2 \
+  --model-path ml/registry/model_v2.pkl
+
+MODEL_PATH=ml/registry/model_v2.pkl uvicorn app.main:app --port 8000
+```
+
+The `.pkl` files are git-ignored: generate them locally or track them with DVC.
+
 ---
 
 # 溯源（PROVENANCE）
@@ -73,3 +86,16 @@ python ml/train.py              # 重建 v1 两个 run + model.pkl
 python ml/train.py --data data/bank-additional-v2.csv --dataset-version v2 --no-save   # v2 那组
 mlflow ui                       # 查看实验历史
 ```
+
+如果要把 v1/v2 两个产物并排保留：
+
+```bash
+python ml/train.py --data data/bank-additional-full.csv --dataset-version v1 \
+  --model-path ml/registry/model_v1.pkl
+python ml/train.py --data data/bank-additional-v2.csv --dataset-version v2 \
+  --model-path ml/registry/model_v2.pkl
+
+MODEL_PATH=ml/registry/model_v2.pkl uvicorn app.main:app --port 8000
+```
+
+`.pkl` 文件被 git 忽略：本地生成即可，或用 DVC 管理。

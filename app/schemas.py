@@ -1,12 +1,3 @@
-"""请求 / 响应模型 —— 接口契约的代码化表达。
-
-契约四条（Day1 冻结，任何改动需双方同意后同步）：
-  1. 输入结构  {"age": 56, "job": "housemaid", ...}（19 个特征字段，见 PredictRequest）
-  2. 输出结构  {"label": "yes|no", "score": 0.97}
-  3. 特征列序  预处理全部封装在 pkl 的 Pipeline 内（列序见 ml/data_pipeline.py）
-  4. 模型路径  ml/registry/model.pkl
-"""
-
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator

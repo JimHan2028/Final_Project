@@ -31,7 +31,6 @@ BASE_PAYLOAD = {
 
 
 def _variant(**overrides) -> dict:
-    """在合法样本上做字段级修改；值为 _DELETE 表示删除该字段。"""
     payload = dict(BASE_PAYLOAD)
     for key, value in overrides.items():
         if value is _DELETE:

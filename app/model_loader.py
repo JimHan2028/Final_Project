@@ -12,15 +12,28 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# 契约第 4 条：模型路径固定，相对项目根定位，不写死绝对路径
+# 契约第 4 条：默认模型路径固定，相对项目根定位，不写死绝对路径。
+# 需要切换 v1/v2 产物时，用 MODEL_PATH 环境变量覆盖（相对路径按项目根解析）。
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_PATH = PROJECT_ROOT / "ml" / "registry" / "model.pkl"
+DEFAULT_MODEL_PATH = PROJECT_ROOT / "ml" / "registry" / "model.pkl"
+
+
+def _resolve_model_path() -> Path:
+    configured = os.environ.get("MODEL_PATH")
+    if not configured:
+        return DEFAULT_MODEL_PATH
+    path = Path(configured)
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+MODEL_PATH = _resolve_model_path()
 
 # 契约第 2 条：score 是「正类（认购）概率」，不是预测类的置信度
 POSITIVE_LABEL = "yes"
@@ -29,21 +42,18 @@ _model: Any = None
 
 
 class FakeModel:
-    """占位模型：只为跑通链路，不做任何真实预测。
-
-    警告：占位模型无法暴露 pkl 的版本兼容问题，模型回填后必须用真实 pkl
-    做一次集成验证（启动后 /health 应显示 model_loaded=true）。
-    """
-
     is_fake = True
 
     def predict(self, records: Sequence[Mapping[str, Any]]) -> list[str]:
         return ["no"] * len(list(records))
 
 
-def load_model(path: Path = MODEL_PATH) -> Any:
+def load_model(path: Path | None = None) -> Any:
     """加载模型并写入进程内单例。"""
     global _model
+
+    if path is None:
+        path = _resolve_model_path()
 
     if not path.exists():
         logger.warning("模型文件不存在（%s），回落到占位模型", path)
@@ -100,11 +110,6 @@ def _positive_index(model: Any) -> int | None:
 
 
 def _proba_to_scores(model: Any, frame: Any) -> list[float]:
-    """取「yes 类概率」作为 score。
-
-    predict_proba 的列顺序跟 classes_ 对齐，不能简单取 max，
-    否则 score 会变成预测类的置信度（预测 no 时 score 接近 1，语义相反）。
-    """
     proba = model.predict_proba(frame)
     index = _positive_index(model)
     if index is None:
@@ -127,11 +132,6 @@ def _decision_to_scores(raw: Any) -> list[float]:
 
 
 def _records_to_frame(records: Sequence[Mapping[str, Any]]):
-    """把记录字典列表转成带固定列序的 DataFrame（契约第 3 条）。
-
-    延迟导入 pandas / ml.data_pipeline：真实模型路径下两者必然可用
-    （反序列化 pkl 本身就需要），占位模型路径下则完全不依赖。
-    """
     import pandas as pd
 
     from ml.data_pipeline import FEATURE_COLUMNS
