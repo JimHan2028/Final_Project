@@ -125,7 +125,7 @@ $body = @{
 } | ConvertTo-Json
 
 
-Invoke-RestMethod -Uri http://127.0.0.1:8000/predict -Method Post -Body $jsonData -ContentType "application/json"
+Invoke-RestMethod -Uri http://127.0.0.1:8000/predict -Method Post -Body $body -ContentType "application/json"
 
 <!--Docker -->
 docker build -t bank-marketing-api:local .
