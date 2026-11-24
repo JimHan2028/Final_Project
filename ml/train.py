@@ -284,6 +284,15 @@ def main() -> None:
         # 回到最优 run，把最终 pkl 也作为 artifact 归档
         with mlflow.start_run(run_id=best["run_id"]):
             mlflow.log_artifact(str(model_path), artifact_path="model")
+            mlflow.sklearn.log_model(
+                best["pipeline"],
+                name="sklearn-model",
+                registered_model_name="bank-marketing-hgb",
+                skops_trusted_types=[
+                    "numpy.dtype",
+                    "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor",
+                ],
+            )
             mlflow.set_tag("prod_candidate", "true")
 
     print("\n=== 训练完成 ===")
